@@ -51,11 +51,11 @@ spark = SparkSession.builder.appName("LightcastData").getOrCreate()
 df = spark.read.option("header", "true").option("inferSchema", "true").option("multiLine","true").option("escape", "\"").csv("data/lightcast_job_postings.csv")
 df.createOrReplaceTempView("job_postings")
 
-# # Show Schema and Sample Data
-# print("---This is Diagnostic check, No need to print it in the final doc---")
+# Show Schema and Sample Data
+print("---This is Diagnostic check, No need to print it in the final doc---")
 
-# df.printSchema() # comment this line when rendering the submission
-# df.show(5)
+df.printSchema() # comment this line when rendering the submission
+df.show(5)
 ```
 
 ##  Data Prep / Cleaning
@@ -112,19 +112,19 @@ print("Data cleaning complete. Rows retained:", len(pdf))
 **Visualize Results**
   -Create a **box plot** where: 
 
+## Salary Distribution by Industry and Employment Type
+
+### Data Filtering
+
 ```{python}
 pdf = df_selected.filter(df["SALARY"] > 0).select("EMPLOYMENT_TYPE_NAME", "SALARY").toPandas()
 pdf = pdf.dropna()
-```
-```{python}
+
 pdf["EMPLOYMENT_TYPE_NAME"] = pdf["EMPLOYMENT_TYPE_NAME"].apply(lambda x: re.sub(r"[^\x00-\x7F]+", "", x))
-```
-```{python}
+
 median_salaries = pdf.groupby("EMPLOYMENT_TYPE_NAME")["SALARY"].median()
 median_salaries.head()
-```
 
-```{python}
 sorted_employment_types = median_salaries.sort_values(ascending=False).index
 
 pdf["EMPLOYMENT_TYPE_NAME"] = pd.Categorical(
@@ -133,6 +133,8 @@ pdf["EMPLOYMENT_TYPE_NAME"] = pd.Categorical(
   ordered=True
 )
 ```
+
+### Chart
 ```{python}
 fig = px.box(
   pdf,
@@ -183,4 +185,93 @@ fig.update_layout(
 )
 fig.show(renderer="notebook")
 fig.write_html("output/Q1.html")
+```
+
+## Salary Analysis by ONET Occupation Type
+
+### Data Filtering // Setup for Chart
+```{python}
+# Step 1: Filter and select data
+bubble_df = df.filter(df["SALARY"] > 0).select("LOT_V6_SPECIALIZED_OCCUPATION_NAME", "SALARY").toPandas()
+bubble_df = bubble_df.dropna()  # Fixed: assign the result back
+
+print("Original data shape:", bubble_df.shape)
+print(bubble_df.head())
+
+# Step 2: Create grouped DataFrame with median salary and count
+grouped_bubble_df = bubble_df.groupby("LOT_V6_SPECIALIZED_OCCUPATION_NAME").agg({
+    "SALARY": ["median", "count"]
+}).reset_index()
+
+# Flatten column names
+grouped_bubble_df.columns = ["OCCUPATION_NAME", "MEDIAN_SALARY", "RECORD_COUNT"]
+
+print("\nGrouped data:")
+print(grouped_bubble_df.head())
+
+# Step 3: Sort by median salary (descending)
+grouped_bubble_df = grouped_bubble_df.sort_values("MEDIAN_SALARY", ascending=False).reset_index(drop=True)
+
+print("\nTop 10 occupations by median salary:")
+print(grouped_bubble_df.head(10))
+```
+
+### Bubble Chart
+```{python}
+import plotly.graph_objects as go
+
+fig = go.Figure(data=[go.Scatter(
+    x=grouped_bubble_df["OCCUPATION_NAME"],
+    y=grouped_bubble_df["MEDIAN_SALARY"],
+    mode='markers',
+    marker=dict(
+        size=grouped_bubble_df["RECORD_COUNT"],
+        color=grouped_bubble_df["MEDIAN_SALARY"], 
+        colorscale='Viridis',
+        showscale=True,
+        sizemode='diameter',
+        sizeref=2.*max(grouped_bubble_df["RECORD_COUNT"])/(50.**2),  
+        sizemin=4,
+        colorbar=dict(title="Median Salary")
+    ),
+    text=grouped_bubble_df["RECORD_COUNT"],
+    textposition="middle center",
+    hovertemplate='<b>%{x}</b><br>' +
+                  'Median Salary: $%{y:,.0f}<br>' +
+                  'Record Count: %{text}<br>' +
+                  '<extra></extra>'
+)])
+
+
+fig.update_layout(
+    title="Bubble Chart: Occupation vs Median Salary (Bubble Size = Record Count)",
+    xaxis_title="Specialized Occupation Name",
+    yaxis_title="Median Salary ($)",
+    xaxis=dict(tickangle=45),  # Rotate x-axis labels for better readability
+    height=600,
+    width=1200
+)
+
+fig.show(renderer="notebook")
+fig.write_html("output/Q2.html")
+
+```
+
+## Salary by Education Level 
+### Data Filtering / Setup
+```{python}
+
+```
+### Scatter Plot
+```{python}
+
+```
+## Salary by Remote Work Type
+### Data Filtering / Setup
+```{python}
+
+```
+### Scatter Plot
+```{python}
+
 ```

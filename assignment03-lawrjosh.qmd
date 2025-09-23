@@ -191,75 +191,82 @@ fig.write_html("output/Q1.html")
 
 ### Data Filtering // Setup for Chart
 ```{python}
-# Step 1: Filter and select data
-bubble_df = df.filter(df["SALARY"] > 0).select("LOT_V6_SPECIALIZED_OCCUPATION_NAME", "SALARY").toPandas()
-bubble_df = bubble_df.dropna()  # Fixed: assign the result back
+# # Step 1: Filter and select data
+# bubble_df = df.filter(df["SALARY"] > 0).select("LOT_V6_SPECIALIZED_OCCUPATION_NAME", "SALARY").toPandas()
+# bubble_df = bubble_df.dropna()  # Fixed: assign the result back
 
-print("Original data shape:", bubble_df.shape)
-print(bubble_df.head())
+# print("Original data shape:", bubble_df.shape)
+# print(bubble_df.head())
 
-# Step 2: Create grouped DataFrame with median salary and count
-grouped_bubble_df = bubble_df.groupby("LOT_V6_SPECIALIZED_OCCUPATION_NAME").agg({
-    "SALARY": ["median", "count"]
-}).reset_index()
+# # Step 2: Create grouped DataFrame with median salary and count
+# grouped_bubble_df = bubble_df.groupby("LOT_V6_SPECIALIZED_OCCUPATION_NAME").agg({
+#     "SALARY": ["median", "count"]
+# }).reset_index()
 
-# Flatten column names
-grouped_bubble_df.columns = ["OCCUPATION_NAME", "MEDIAN_SALARY", "RECORD_COUNT"]
+# # Flatten column names
+# grouped_bubble_df.columns = ["OCCUPATION_NAME", "MEDIAN_SALARY", "RECORD_COUNT"]
 
-print("\nGrouped data:")
-print(grouped_bubble_df.head())
+# print("\nGrouped data:")
+# print(grouped_bubble_df.head())
 
-# Step 3: Sort by median salary (descending)
-grouped_bubble_df = grouped_bubble_df.sort_values("MEDIAN_SALARY", ascending=False).reset_index(drop=True)
+# # Step 3: Sort by median salary (descending)
+# grouped_bubble_df = grouped_bubble_df.sort_values("MEDIAN_SALARY", ascending=False).reset_index(drop=True)
 
-print("\nTop 10 occupations by median salary:")
-print(grouped_bubble_df.head(10))
+# print("\nTop 10 occupations by median salary:")
+# print(grouped_bubble_df.head(10))
+
+bubble_chart_df = spark.sql("""
+    SELECT 
+      LOT_V6_SPECIALIZED_OCCUPATION_NAME AS ONET_NAME,
+      PERCENTILE(SALARY, 0.5) AS Median_Salary,
+      COUNT(*) AS Job_Postings
+      FROM job_postings
+      GROUP BY LOT_V6_SPECIALIZED_OCCUPATION_NAME
+      ORDER BY Job_Postings DESC
+      LIMIT 10
+""")
+
+bubble_chart_df_pd = bubble_chart_df.toPandas()
+bubble_chart_df_pd.head()
 ```
 
 ### Bubble Chart
 ```{python}
-import plotly.graph_objects as go
+import plotly.express as px
 
-fig = go.Figure(data=[go.Scatter(
-    x=grouped_bubble_df["OCCUPATION_NAME"],
-    y=grouped_bubble_df["MEDIAN_SALARY"],
-    mode='markers',
-    marker=dict(
-        size=grouped_bubble_df["RECORD_COUNT"],
-        color=grouped_bubble_df["MEDIAN_SALARY"], 
-        colorscale='Viridis',
-        showscale=True,
-        sizemode='diameter',
-        sizeref=2.*max(grouped_bubble_df["RECORD_COUNT"])/(50.**2),  
-        sizemin=4,
-        colorbar=dict(title="Median Salary")
-    ),
-    text=grouped_bubble_df["RECORD_COUNT"],
-    textposition="middle center",
-    hovertemplate='<b>%{x}</b><br>' +
-                  'Median Salary: $%{y:,.0f}<br>' +
-                  'Record Count: %{text}<br>' +
-                  '<extra></extra>'
-)])
-
-
-fig.update_layout(
-    title="Bubble Chart: Occupation vs Median Salary (Bubble Size = Record Count)",
-    xaxis_title="Specialized Occupation Name",
-    yaxis_title="Median Salary ($)",
-    xaxis=dict(tickangle=45),  # Rotate x-axis labels for better readability
-    height=600,
-    width=1200
+fig = px.scatter(
+  bubble_chart_df_pd,
+  x="ONET_NAME",
+  y="Median_Salary",
+  size="Job_Postings",
+  title="Salary Analysis by LOT Occupation Type",
+  labels={
+    "LOT_V6_SPECIALIZED_OCCUPATION_NAME": "LOT Occupation",
+    "Median_Salary": "Median Salary",
+    "Job_Postings": "Number of Job Postings"
+  },
+  hover_name= "ONET_NAME",
+  size_max=60,
+  width=1000,
+  height=600,
+  color="Job_Postings",
+  color_continuous_scale="Plasma"
 )
 
 fig.show(renderer="notebook")
 fig.write_html("output/Q2.html")
-
 ```
 
 ## Salary by Education Level 
 ### Data Filtering / Setup
 ```{python}
+edu_salary = df.filter(df["SALARY"] > 0).select("EDUCATION_LEVELS_NAME", "SALARY").toPandas()
+
+edu_salary["EDUCATION_LEVELS_NAME"] = edu_salary["EDUCATION_LEVELS_NAME"].apply(lambda x: re.sub(r"\n", "", x))
+
+unique_values = edu_salary["EDUCATION_LEVELS_NAME"].unique()
+print(unique_values)
+
 
 ```
 ### Scatter Plot

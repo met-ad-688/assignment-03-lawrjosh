@@ -29,6 +29,7 @@ Use Pyspark to the lightcast_data.csv file into a DataFrame: -->
 #| echo: true
 #| fig-align: center
 
+import kaleido
 import pandas as pd
 import plotly.express as px
 import plotly.io as pio
@@ -42,7 +43,7 @@ from pyspark.sql.functions import col, monotonically_increasing_id
 
 np.random.seed(123)
 
-pio.renderers.default = "vscode+svg+jpg"
+pio.renderers.default = "notebook_connected"
 
 # Initialize Spark Session
 spark = SparkSession.builder.appName("LightcastData").getOrCreate()
@@ -61,6 +62,9 @@ df.createOrReplaceTempView("job_postings")
 ##  Data Prep / Cleaning
 
 ```{python}
+#| eval: true
+#| echo: true
+#| fig-align: center
 df = df.withColumn("SALARY_FROM", col("SALARY_FROM").cast("float")) \
 .withColumn("SALARY", col("SALARY").cast("float")) \
 .withColumn("SALARY_TO", col("SALARY_TO").cast("float")) \
@@ -92,7 +96,8 @@ export_cols = [
   "Average_Salary",
   "SALARY",
   "EMPLOYMENT_TYPE_NAME",
-  "LOT_V6_SPECIALIZED_OCCUPATION_NAME"
+  "LOT_V6_SPECIALIZED_OCCUPATION_NAME",
+  "NAICS2_NAME"
 ]
 df_selected = df.select(*export_cols)
 
@@ -108,31 +113,50 @@ print("Data cleaning complete. Rows retained:", len(pdf))
 ### Data Filtering
 
 ```{python}
-pdf = df_selected.filter(df["SALARY"] > 0).select("EMPLOYMENT_TYPE_NAME", "SALARY").toPandas()
+#| eval: true
+#| echo: true
+#| fig-align: center
+pdf = df_selected.filter(df["SALARY"] > 0).select("EMPLOYMENT_TYPE_NAME", "SALARY", "NAICS2_NAME").toPandas()
 pdf = pdf.dropna()
 
 pdf["EMPLOYMENT_TYPE_NAME"] = pdf["EMPLOYMENT_TYPE_NAME"].apply(lambda x: re.sub(r"[^\x00-\x7F]+", "", x))
 
-median_salaries = pdf.groupby("EMPLOYMENT_TYPE_NAME")["SALARY"].median()
-median_salaries.head()
+median_salaries_naics = pdf.groupby("NAICS2_NAME")["SALARY"].median()
 
+top_20_naics = median_salaries_naics.sort_values(ascending=False).head(20).index
+pdf = pdf[pdf["NAICS2_NAME"].isin(top_20_naics)]
+
+pdf["NAICS2_NAME"] = pd.Categorical(
+    pdf["NAICS2_NAME"],
+    categories=top_20_naics,
+    ordered=True
+)
+pdf = pdf[pdf["NAICS2_NAME"].isin(top_20_naics)]
+
+median_salaries = pdf.groupby("EMPLOYMENT_TYPE_NAME")["SALARY"].median()
 sorted_employment_types = median_salaries.sort_values(ascending=False).index
 
 pdf["EMPLOYMENT_TYPE_NAME"] = pd.Categorical(
-  pdf["EMPLOYMENT_TYPE_NAME"],
-  categories=sorted_employment_types,
-  ordered=True
+    pdf["EMPLOYMENT_TYPE_NAME"],
+    categories=sorted_employment_types,
+    ordered=True
 )
 ```
 
 ### Chart
 ```{python}
+#| eval: true
+#| echo: true
+#| fig-align: center
 fig = px.box(
   pdf,
-  x="EMPLOYMENT_TYPE_NAME",
+  x="NAICS2_NAME",
   y="SALARY",
-  title="Salary Distribution by Employment Type",
-  color_discrete_sequence=["blue"],
+  labels={
+    "NAICS2_NAME": "NAICS Name",
+    "SALARY": "Salary"
+  },
+  color_discrete_sequence=["#4682B4"],
   boxmode="group",
   points="all",
 )
@@ -143,8 +167,8 @@ fig.update_layout(
   ),
   xaxis=dict(
     title=dict(text="Employment Type", font=dict(size=24, family="Arial", color="black", weight="bold")),
-    tickangle=0,
-    tickfont=dict(size=18, family="Arial", color="black", weight="bold"),
+    tickangle=70,
+    tickfont=dict(size=10, family="Arial", color="black", weight="bold"),
     showline=True,
     linewidth=2,
     linecolor="black",
@@ -168,22 +192,25 @@ fig.update_layout(
   ),
   font=dict(family="Arial", size=16, color="black"),
   boxgap=0.7,
-  plot_bgcolor="white",
-  paper_bgcolor="white",
-  showlegend=False,
-  height=500,
-  width=850
+  plot_bgcolor="#F5F5F5",
+  paper_bgcolor="#DCDCDC",
+  showlegend=True,
+  height=850,
+  width=1300
 )
-fig.show(renderer="notebook")
-fig.write_html("output/Q1.html")
+fig.show()
+fig.write_html("output/naics_salary.html")
 ```
-#### Explanation
+### Explanation // Chart Analysis
+Salaries vary widely across employment types, with fields like Information and Manufacturing showing higher median salaries compared to sectors like Accommodation and Food Services. Outliers exist in almost all industries, with some individuals earning well above the median levels.
 
 ## Salary Analysis by ONET Occupation Type
 
 ### Data Filtering // Setup for Chart
 ```{python}
-
+#| eval: true
+#| echo: true
+#| fig-align: center
 bubble_chart_df = spark.sql("""
     SELECT 
       LOT_V6_SPECIALIZED_OCCUPATION_NAME AS ONET_NAME,
@@ -201,6 +228,9 @@ bubble_chart_df_pd.head()
 
 ### Bubble Chart
 ```{python}
+#| eval: true
+#| echo: true
+#| fig-align: center
 import plotly.express as px
 
 fig = px.scatter(
@@ -216,20 +246,57 @@ fig = px.scatter(
   },
   hover_name= "ONET_NAME",
   size_max=60,
-  width=1000,
-  height=600,
   color="Job_Postings",
-  color_continuous_scale="Plasma"
+  color_continuous_scale="emrld"
 )
-
-fig.show(renderer="notebook")
-fig.write_html("output/Q2.html")
+fig.update_layout(
+  title=dict(
+    text="Median Salary by Occupation Type",
+    font=dict(size=24, family="Arial", color="black", weight="bold")
+  ),
+  xaxis=dict(
+    title=dict(text="Occupation Name", font=dict(size=24, family="Arial", color="black", weight="bold")),
+    tickangle=60,
+    tickfont=dict(size=12, family="Arial", color="black", weight="bold"),
+    showline=True,
+    linewidth=2,
+    linecolor="black",
+    mirror=True,
+    showgrid=False,
+  ),
+  yaxis=dict(
+    title=dict(text="Median Salary (k $)", font=dict(size=24, family="Arial", color="black", weight="bold")),
+    tickvals=[40000, 50000, 60000, 70000, 80000, 90000, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000],
+    ticktext=["40k", "50k", "60k", "70k", "80k", "90K", "100K", "110K", "120K", "130K", "140k", "150k", "160k", "170k"],
+    tickfont=dict(size=12, family="Arial", color="black", weight="bold"),
+    showline=True,
+    linewidth=2,
+    linecolor="black",
+    mirror=True,
+    showgrid=True,
+    gridcolor="lightgray",
+    gridwidth=0.5
+  ),
+  font=dict(family="Arial", size=16, color="black"),
+  boxgap=0.7,
+  plot_bgcolor="white",
+  paper_bgcolor="white",
+  showlegend=True,
+  height=850,
+  width=1000
+)
+fig.show()
+fig.write_html("output/bubblechart.html")
 ```
-#### Explanation
+### Explanation // Chart Analysis
+Enterprise Architect and Oracle Consultant roles have the highest median salaries, while Data Analyst positions have the lowest but also the largest number of job postings. Specialized roles generally command higher pay despite fewer postings.
 
 ## Salary by Education Level 
 ### Data Filtering / Setup
 ```{python}
+#| eval: true
+#| echo: true
+#| fig-align: center
 lower_degree = ["Associate", "GED", "No Education Listed", "High School"]
 bachelors_degree = ["Bachelor's"]
 higher_degree = ["Master's degree", "PhD or professional degree"]
@@ -255,26 +322,72 @@ saledu_df = df_filtered.toPandas()
 ```
 ### Scatter Plot
 ```{python}
+#| eval: true
+#| echo: true
+#| fig-align: center
 saledufig = px.scatter(
   saledu_df,
   x="MAX_YEARS_EXPERIENCE",
   y="Average_Salary",
   color="EDU_GROUP",
   hover_data=["LOT_V6_SPECIALIZED_OCCUPATION_NAME"],
-  title="<b>Experience vs Salary by Education Level</b>",
   opacity=0.7,
-  color_discrete_sequence=["blanchedalmond", "darkblue", "darkcyan"]
+  labels = {
+    "EDU_GROUP": "Level of Education",
+    "LOT_V6_SPECIALIZED_OCCUPATION_NAME": "Occupation Title",
+    "Average_Salary": "Average Salary",
+    "MAX_YEARS_EXPERIENCE": "Years of Experience"
+  },
+  color_discrete_sequence=["#B4464B", "#4682B4", "#B4AF46"]
 )
-
-saledufig.show(renderer="notebook")
+saledufig.update_layout(
+  title=dict(
+    text="Experience vs Salary by Education Level",
+    font=dict(size=30, family="Arial", color="black", weight="bold")
+  ),
+  xaxis=dict(
+    title=dict(text="Years of Experience", font=dict(size=24, family="Arial", color="black", weight="bold")),
+    tickangle=0,
+    tickfont=dict(size=12, family="Arial", color="black", weight="bold"),
+    showline=True,
+    linewidth=2,
+    linecolor="black",
+    mirror=True,
+    showgrid=True,
+  ),
+  yaxis=dict(
+    title=dict(text="Average Salary (K $)", font=dict(size=24, family="Arial", color="black", weight="bold")),
+    tickvals=[0, 50000, 100000, 150000, 200000, 250000, 300000, 350000, 400000, 450000, 500000, 550000, 600000, 650000, 700000, 750000, 800000],
+    ticktext=["0", "50k", "100k", "150k", "200k", "250k", "300k", "350k", "400k", "450k", "500k", "550k", "600k", "650k", "700k", "750k", "800k"],
+    tickfont=dict(size=12, family="Arial", color="black", weight="bold"),
+    showline=True,
+    linewidth=2,
+    linecolor="black",
+    mirror=True,
+    showgrid=True,
+    gridcolor="lightgray",
+    gridwidth=0.5
+  ),
+  font=dict(family="Arial", size=16, color="black"),
+  boxgap=0.7,
+  plot_bgcolor="#F5F5F5",
+  paper_bgcolor="#DCDCDC",
+  showlegend=True,
+  height=850,
+  width=1000
+)
+saledufig.show()
 saledufig.write_html("output/saledufig.html")
 ```
-#### Explanation
-
+### Explanation // Chart Analysis
+Higher education levels, particularly Master's or PhD, show some instances of higher salaries, though the overall pattern across experience years remains mixed. Many high-earning outliers appear at lower experience levels, suggesting factors beyond experience and education influence pay.
 
 ## Salary by Remote Work Type
 ### Data Filtering / Setup
 ```{python}
+#| eval: true
+#| echo: true
+#| fig-align: center
 Onsite = ["None", "Not Remote"]
 Remote = ["Remote"]
 Hybrid = ["Hybrid"]
@@ -293,18 +406,66 @@ remote_df = df_filtered.toPandas()
 ```
 ### Scatter Plot
 ```{python}
+#| eval: true
+#| echo: true
+#| fig-align: center
 remotefig = px.scatter(
   remote_df,
   x="MAX_YEARS_EXPERIENCE",
   y="Average_Salary",
   color="WORK_LOC",
   hover_data=["LOT_V6_SPECIALIZED_OCCUPATION_NAME"],
-  title="<b>Experience vs Salary by Education Level</b>",
   opacity=0.7,
-  color_discrete_sequence=["blanchedalmond", "darkblue", "darkcyan"]
+  labels = {
+    "WORK_LOC": "Remote Type",
+    "LOT_V6_SPECIALIZED_OCCUPATION_NAME": "Occupation Title",
+    "Average_Salary": "Average Salary",
+    "MAX_YEARS_EXPERIENCE": "Years of Experience"
+  },
+  color_discrete_sequence=["#B4464B", "#4682B4", "#B4AF46"]
 )
-
-remotefig.show(renderer="notebook")
+remotefig.update_layout(
+  title=dict(
+    text="Experience vs Salary by Remote Type",
+    font=dict(size=30, family="Arial", color="black", weight="bold")
+  ),
+  xaxis=dict(
+    title=dict(text="Years of Experience", font=dict(size=24, family="Arial", color="black", weight="bold")),
+    tickangle=0,
+    tickfont=dict(size=12, family="Arial", color="black", weight="bold"),
+    showline=True,
+    linewidth=2,
+    linecolor="black",
+    mirror=True,
+    showgrid=True,
+  ),
+  yaxis=dict(
+    title=dict(text="Average Salary (k $)", font=dict(size=24, family="Arial", color="black", weight="bold")),
+    tickvals=[0, 50000, 100000, 150000, 200000, 250000, 300000, 350000, 400000, 450000, 500000, 550000, 600000, 650000, 700000, 750000, 800000],
+    ticktext=["0", "50k", "100k", "150k", "200k", "250k", "300k", "350k", "400k", "450k", "500k", "550k", "600k", "650k", "700k", "750k", "800k"],
+    tickfont=dict(size=12, family="Arial", color="black", weight="bold"),
+    showline=True,
+    linewidth=2,
+    linecolor="black",
+    mirror=True,
+    showgrid=True,
+    gridcolor="lightgray",
+    gridwidth=0.5
+  ),
+  font=dict(family="Arial", size=16, color="black"),
+  boxgap=0.7,
+  plot_bgcolor="#F5F5F5",
+  paper_bgcolor="#DCDCDC",
+  showlegend=True,
+  height=850,
+  width=1000
+)
+remotefig.show()
 remotefig.write_html("output/remotefig.html")
 ```
-#### Explanation
+### Salary Histograms 
+
+
+
+### Explanation // Chart Analysis
+Salaries tend to increase slightly with more years of experience, regardless of remote type, but there is significant variability among individual cases. Onsite roles appear to have the highest salary outliers compared to Remote and Hybrid positions.

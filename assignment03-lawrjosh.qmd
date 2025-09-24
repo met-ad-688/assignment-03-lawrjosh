@@ -465,7 +465,7 @@ remotefig.write_html("output/remotefig.html")
 ```
 ### Salary Histograms 
 ```{python}
-fig = px.histogram(
+salhist = px.histogram(
   remote_df, 
   x='SALARY', 
   facet_col='WORK_LOC',
@@ -473,8 +473,16 @@ fig = px.histogram(
   labels={'SALARY': 'Salary', 'count': 'Frequency'},
   nbins=20)
 
-fig.update_layout(height=400, showlegend=False)
-fig.show()
+salhist.update_layout(height=400, showlegend=False)
+salhist.show()
+salhist.write_html("output/salhist.html")
 ```
 ### Explanation // Chart Analysis
 Salaries tend to increase slightly with more years of experience, regardless of remote type, but there is significant variability among individual cases. Onsite roles appear to have the highest salary outliers compared to Remote and Hybrid positions.
+
+### Salary Histogram Analysis 
+Onsite: The onsite salary distribution shows the largest concentration of salaries between $90K–$120K, with a sharp peak around $100K and relatively few outliers above $150K. This indicates that onsite roles dominate the dataset and generally cluster tightly around a consistent mid-range salary.
+
+Remote: Remote roles show a smaller but noticeable concentration around $100K–$120K, with fewer postings overall compared to onsite work. While the distribution shape is similar, the lower counts suggest fewer remote opportunities or less data relative to onsite jobs.
+
+Hybrid: Hybrid roles have the smallest sample size, with only a modest cluster around $100K–$120K and minimal variation beyond $150K. This limited data may indicate either fewer hybrid postings or less reporting of salaries for such roles.

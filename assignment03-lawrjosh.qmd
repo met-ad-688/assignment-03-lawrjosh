@@ -255,7 +255,19 @@ saledu_df = df_filtered.toPandas()
 ```
 ### Scatter Plot
 ```{python}
+saledufig = px.scatter(
+  saledu_df,
+  x="MAX_YEARS_EXPERIENCE",
+  y="Average_Salary",
+  color="EDU_GROUP",
+  hover_data=["LOT_V6_SPECIALIZED_OCCUPATION_NAME"],
+  title="<b>Experience vs Salary by Education Level</b>",
+  opacity=0.7,
+  color_discrete_sequence=["blanchedalmond", "darkblue", "darkcyan"]
+)
 
+saledufig.show(renderer="notebook")
+saledufig.write_html("output/saledufig.html")
 ```
 #### Explanation
 
@@ -281,6 +293,18 @@ remote_df = df_filtered.toPandas()
 ```
 ### Scatter Plot
 ```{python}
+remotefig = px.scatter(
+  remote_df,
+  x="MAX_YEARS_EXPERIENCE",
+  y="Average_Salary",
+  color="WORK_LOC",
+  hover_data=["LOT_V6_SPECIALIZED_OCCUPATION_NAME"],
+  title="<b>Experience vs Salary by Education Level</b>",
+  opacity=0.7,
+  color_discrete_sequence=["blanchedalmond", "darkblue", "darkcyan"]
+)
 
+remotefig.show(renderer="notebook")
+remotefig.write_html("output/remotefig.html")
 ```
 #### Explanation

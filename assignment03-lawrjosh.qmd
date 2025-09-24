@@ -51,11 +51,11 @@ spark = SparkSession.builder.appName("LightcastData").getOrCreate()
 df = spark.read.option("header", "true").option("inferSchema", "true").option("multiLine","true").option("escape", "\"").csv("data/lightcast_job_postings.csv")
 df.createOrReplaceTempView("job_postings")
 
-# Show Schema and Sample Data
-print("---This is Diagnostic check, No need to print it in the final doc---")
+# # Show Schema and Sample Data
+# print("---This is Diagnostic check, No need to print it in the final doc---")
 
-df.printSchema() # comment this line when rendering the submission
-df.show(5)
+# df.printSchema() # comment this line when rendering the submission
+# df.show(5)
 ```
 
 ##  Data Prep / Cleaning
@@ -102,15 +102,6 @@ pdf.to_csv("./data/lightcast_cleaned.csv", index=False)
 print("Data cleaning complete. Rows retained:", len(pdf))
 
 ```
-
-```{python}
-# salary_df = df.filter(col("SALARY").isNotNull() & (col("SALARY") > 0))
-# fig = px.histogram(salary_df.toPandas(), x="SALARY", nbins=50, title="Salary Distribution")
-# fig.update_layout(bargap=0.1) 
-# fig.show()
-```
-**Visualize Results**
-  -Create a **box plot** where: 
 
 ## Salary Distribution by Industry and Employment Type
 
@@ -186,34 +177,12 @@ fig.update_layout(
 fig.show(renderer="notebook")
 fig.write_html("output/Q1.html")
 ```
+#### Explanation
 
 ## Salary Analysis by ONET Occupation Type
 
 ### Data Filtering // Setup for Chart
 ```{python}
-# # Step 1: Filter and select data
-# bubble_df = df.filter(df["SALARY"] > 0).select("LOT_V6_SPECIALIZED_OCCUPATION_NAME", "SALARY").toPandas()
-# bubble_df = bubble_df.dropna()  # Fixed: assign the result back
-
-# print("Original data shape:", bubble_df.shape)
-# print(bubble_df.head())
-
-# # Step 2: Create grouped DataFrame with median salary and count
-# grouped_bubble_df = bubble_df.groupby("LOT_V6_SPECIALIZED_OCCUPATION_NAME").agg({
-#     "SALARY": ["median", "count"]
-# }).reset_index()
-
-# # Flatten column names
-# grouped_bubble_df.columns = ["OCCUPATION_NAME", "MEDIAN_SALARY", "RECORD_COUNT"]
-
-# print("\nGrouped data:")
-# print(grouped_bubble_df.head())
-
-# # Step 3: Sort by median salary (descending)
-# grouped_bubble_df = grouped_bubble_df.sort_values("MEDIAN_SALARY", ascending=False).reset_index(drop=True)
-
-# print("\nTop 10 occupations by median salary:")
-# print(grouped_bubble_df.head(10))
 
 bubble_chart_df = spark.sql("""
     SELECT 
@@ -256,29 +225,62 @@ fig = px.scatter(
 fig.show(renderer="notebook")
 fig.write_html("output/Q2.html")
 ```
+#### Explanation
 
 ## Salary by Education Level 
 ### Data Filtering / Setup
 ```{python}
-edu_salary = df.filter(df["SALARY"] > 0).select("EDUCATION_LEVELS_NAME", "SALARY").toPandas()
+lower_degree = ["Associate", "GED", "No Education Listed", "High School"]
+bachelors_degree = ["Bachelor's"]
+higher_degree = ["Master's degree", "PhD or professional degree"]
 
-edu_salary["EDUCATION_LEVELS_NAME"] = edu_salary["EDUCATION_LEVELS_NAME"].apply(lambda x: re.sub(r"\n", "", x))
+df = df.withColumn(
+  "EDU_GROUP",
+  when(col("EDUCATION_LEVELS_NAME").rlike("|".join([f"(?i){deg}" for deg in lower_degree])), "Associate or lower")
+  .when(col("EDUCATION_LEVELS_NAME").rlike("|".join([f"(?i){deg}" for deg in bachelors_degree])), "Bachelor's")
+  .when(col("EDUCATION_LEVELS_NAME").rlike("|".join([f"(?i){deg}" for deg in higher_degree])), "Master's or PhD")
+  .otherwise("Other")
+)
 
-unique_values = edu_salary["EDUCATION_LEVELS_NAME"].unique()
-print(unique_values)
+df = df.filter(
+  col("MAX_YEARS_EXPERIENCE").isNotNull() &
+  col("Average_Salary").isNotNull() &
+  (col("MAX_YEARS_EXPERIENCE") > 0) &
+  (col("Average_Salary") > 0)
+)
 
+df_filtered = df.filter(col("EDU_GROUP").isin("Associate or lower", "Bachelor's", "Master's or PhD"))
 
+saledu_df = df_filtered.toPandas()
 ```
 ### Scatter Plot
 ```{python}
 
 ```
+#### Explanation
+
+
 ## Salary by Remote Work Type
 ### Data Filtering / Setup
 ```{python}
+Onsite = ["None", "Not Remote"]
+Remote = ["Remote"]
+Hybrid = ["Hybrid"]
 
+df = df.withColumn(
+  "WORK_LOC",
+  when(col("REMOTE_TYPE_NAME").rlike("|".join([f"(?i){deg}" for deg in Onsite])), "Onsite")
+    .when(col("REMOTE_TYPE_NAME").rlike("|".join([f"(?i){deg}" for deg in Hybrid])), "Hybrid")
+    .when(col("REMOTE_TYPE_NAME").rlike("|".join([f"(?i){deg}" for deg in Remote])), "Remote")
+  .otherwise("Other")
+)
+
+df_filtered = df.filter(col("WORK_LOC").isin("Onsite", "Remote", "Hybrid"))
+
+remote_df = df_filtered.toPandas()
 ```
 ### Scatter Plot
 ```{python}
 
 ```
+#### Explanation

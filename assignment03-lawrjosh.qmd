@@ -464,8 +464,17 @@ remotefig.show()
 remotefig.write_html("output/remotefig.html")
 ```
 ### Salary Histograms 
+```{python}
+fig = px.histogram(
+  remote_df, 
+  x='SALARY', 
+  facet_col='WORK_LOC',
+  title='Salary Distribution by Work Location Type',
+  labels={'SALARY': 'Salary', 'count': 'Frequency'},
+  nbins=20)
 
-
-
+fig.update_layout(height=400, showlegend=False)
+fig.show()
+```
 ### Explanation // Chart Analysis
 Salaries tend to increase slightly with more years of experience, regardless of remote type, but there is significant variability among individual cases. Onsite roles appear to have the highest salary outliers compared to Remote and Hybrid positions.
